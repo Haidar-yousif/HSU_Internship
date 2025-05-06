@@ -68,6 +68,8 @@ class DirCNNVAE(BaseVAE):
                  n_ems: int,
                  beta: float,
                  patch_size: int = 12,
+                 init_mode='constant',
+                 init_value=0.0,
                  encoder_activation_fn: callable = nn.LeakyReLU(),
                  encoder_batch_norm: bool = False):
 
@@ -82,19 +84,19 @@ class DirCNNVAE(BaseVAE):
 
         self.encoder = self._build_encoder(encoder_activation_fn)
         self.decoder = self._build_decoder()
-
+        self._init_decoder_weights(init_mode=init_mode,init_value=init_value)
     def _build_encoder(self, encoder_activation_fn):
         layers = [
             #nn.Conv2d(self.n_bands, 48, kernel_size=3,padding=1, padding_mode="reflect", bias=False),
-            nn.Conv2d(self.n_bands, 64, kernel_size=3, padding_mode="reflect", bias=False), # patch+1
-            encoder_activation_fn,
-            nn.BatchNorm2d(64),
+            # nn.Conv2d(self.n_bands, 64, kernel_size=3, padding_mode="reflect", bias=False), # patch+1
+            # encoder_activation_fn,
+            # nn.BatchNorm2d(64),
 
-            nn.Conv2d(64, 32, kernel_size=3, padding_mode="reflect", bias=False), # patch+1
+            nn.Conv2d(self.n_bands, 16, kernel_size=3, padding_mode="reflect", bias=False), # patch+1
             encoder_activation_fn,
-            nn.BatchNorm2d(32),
+            nn.BatchNorm2d(16),
 
-            nn.Conv2d(32, self.n_ems, kernel_size=1, bias=False),
+            nn.Conv2d(16, self.n_ems, kernel_size=1, bias=False),
             encoder_activation_fn,
             nn.BatchNorm2d(self.n_ems),
             nn.Softplus()  # Add Softplus correctly
@@ -107,11 +109,11 @@ class DirCNNVAE(BaseVAE):
             self.n_ems,
             self.n_bands,
             kernel_size=1,
-            padding=2,
+            padding=0,
             padding_mode="reflect",
             bias=False,
         )
-        decoder.weight.data.clamp_(min=0.0)
+
         return decoder
 
 
@@ -153,6 +155,16 @@ class DirCNNVAE(BaseVAE):
 
 
 
+    def _init_decoder_weights(self,init_mode='constant',init_value=0.0):
+
+      if init_mode=='constant':
+        nn.init.constant_(self.decoder.weight,init_value)
+        if self.decoder.bias is not None:
+          nn.init.constant_(self.decoder.bias,0)
+      else:
+        nn.init.kaiming_normal_(self.decoder.weight,mode='fan_out',nonlinearity='relu')
+        if self.decoder.bias is not None:
+          nn.init.constant_(self.decoder.bias,0)
 
     def get_endmembers(self,
                        layer_idx: int = -1):
@@ -195,8 +207,8 @@ if __name__ == "__main__":
 
     #from torchinfo import summary
 
-    model = DirCNNVAE(n_bands=10, n_ems=3, beta=1.0 ,patch_size=12)
-    input = torch.randn(1,10,12,12)
+    model = DirCNNVAE(n_bands=10, n_ems=3, beta=1.0 ,patch_size=12,init_mode='constant')
+    input = torch.randn(1,10,8,8)
     output,z_latent,alphas=model(input)
     print(f"Output shape: {output.shape}")
     print(f"z_latent shape: {z_latent.shape}")
